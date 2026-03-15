@@ -8,18 +8,20 @@ import model.NodeType;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FileManagementService {
+public class FileSystem {
 
     private final DirectoryNode rootNode;
-    private DirectoryNode currentNode;
 
-    public FileManagementService() {
+    public FileSystem() {
         this.rootNode = new DirectoryNode("/", null);
-        currentNode = rootNode;
     }
 
-    public DirectoryNode mkdir(String directoryPath){
-        DirectoryNode node = startingNode(directoryPath);
+    public DirectoryNode getRoot() {
+        return rootNode;
+    }
+
+    public DirectoryNode mkdir(String directoryPath, DirectoryNode workingDir){
+        DirectoryNode node = startingNode(directoryPath, workingDir);
 
         for(String segment : splitPath(directoryPath, node)){
             if(segment.isEmpty() || segment.equals(".")) continue;
@@ -40,15 +42,8 @@ public class FileManagementService {
         return node;
     }
 
-    public DirectoryNode cd(String directoryPath){
-        DirectoryNode node = resolvePath(directoryPath);
-        if(node == null) throw new IllegalArgumentException("Path does not exist: " + directoryPath);
-        currentNode = node;
-        return node;
-    }
-
-    public DirectoryNode resolvePath(String path){
-        DirectoryNode node = startingNode(path);
+    public DirectoryNode resolvePath(String path, DirectoryNode workingDir){
+        DirectoryNode node = startingNode(path, workingDir);
 
         for(String segment : splitPath(path, node)){
             if(segment.isEmpty() || segment.equals(".")) continue;
@@ -64,20 +59,8 @@ public class FileManagementService {
         return node;
     }
 
-    public String pwd(){
-        if(currentNode == rootNode) return "/";
-
-        StringBuilder path = new StringBuilder();
-        DirectoryNode node = currentNode;
-        while(node != null && node != rootNode){
-            path.insert(0, "/" + node.getName());
-            node = (DirectoryNode) node.getParent();
-        }
-        return path.toString();
-    }
-
-    public FileNode addFile(String filePath, String content){
-        DirectoryNode directoryNode = resolveParent(filePath);
+    public FileNode addFile(String filePath, String content, DirectoryNode workingDir){
+        DirectoryNode directoryNode = resolveParent(filePath, workingDir);
         String fileName = extractLastName(filePath);
 
         Node existing = directoryNode.getChild(fileName);
@@ -89,8 +72,8 @@ public class FileManagementService {
         return fileNode;
     }
 
-    public List<String> ls(String path){
-        DirectoryNode node = resolvePath(path);
+    public List<String> ls(String path, DirectoryNode workingDir){
+        DirectoryNode node = resolvePath(path, workingDir);
         if(node == null) throw new IllegalArgumentException("Directory does not exist: " + path);
 
         List<String> entries = new ArrayList<>();
@@ -100,8 +83,8 @@ public class FileManagementService {
         return entries;
     }
 
-    public String readFile(String filePath){
-        DirectoryNode directoryNode = resolveParent(filePath);
+    public String readFile(String filePath, DirectoryNode workingDir){
+        DirectoryNode directoryNode = resolveParent(filePath, workingDir);
         String fileName = extractLastName(filePath);
 
         Node fileNode = directoryNode.getChild(fileName);
@@ -111,15 +94,15 @@ public class FileManagementService {
         return ((FileNode) fileNode).getContent();
     }
 
-    public void rm(String path){
-        rm(path, false);
+    public void rm(String path, DirectoryNode workingDir){
+        rm(path, false, workingDir);
     }
 
-    public void rm(String path, boolean recursive){
+    public void rm(String path, boolean recursive, DirectoryNode workingDir){
 
         if(path.equals("/")) throw new IllegalArgumentException("Cannot delete Root Directory");
 
-        DirectoryNode parentNode = resolveParent(path);
+        DirectoryNode parentNode = resolveParent(path, workingDir);
         String nodeName = extractLastName(path);
         Node child = parentNode.getChild(nodeName);
 
@@ -127,7 +110,7 @@ public class FileManagementService {
             throw new IllegalArgumentException("File/Directory does not exist: " + path);
         }
 
-        if(isAncestor(child, currentNode)){
+        if(isAncestor(child, workingDir)){
             throw new IllegalArgumentException("Cannot delete: " + path + ". Currently in use");
         }
 
@@ -142,53 +125,49 @@ public class FileManagementService {
         parentNode.removeChild(nodeName);
     }
 
-    public List<String> find(String basePath, String name){
+    public List<String> find(String basePath, String name, DirectoryNode workingDir){
         List<String> nodeList = new ArrayList<>();
-        DirectoryNode directoryNode = resolvePath(basePath);
+        DirectoryNode directoryNode = resolvePath(basePath, workingDir);
         if(directoryNode == null) throw new IllegalArgumentException("Invalid basePath: " + basePath);
         String currentPath = getAbsolutePath(directoryNode);
         findByDFS(directoryNode, currentPath, name, nodeList);
         return nodeList;
     }
 
-    public void mv(String source, String dest){
+    public void mv(String source, String dest, DirectoryNode workingDir){
 
         if(source.equals("/")) throw new IllegalArgumentException("Cannot move root node");
 
-        DirectoryNode sourceParent = resolveParent(source);
+        DirectoryNode sourceParent = resolveParent(source, workingDir);
         String sourceName = extractLastName(source);
         Node sourceNode = sourceParent.getChild(sourceName);
 
         if(sourceNode == null){
-            throw new IllegalArgumentException("Source does not exists: " + source);
+            throw new IllegalArgumentException("Source does not exist: " + source);
         }
 
-        if(isAncestor(sourceNode, currentNode)){
-            throw new IllegalArgumentException("Cannot move Source is currently in use");
+        if(isAncestor(sourceNode, workingDir)){
+            throw new IllegalArgumentException("Cannot move: source is currently in use");
         }
 
         DirectoryNode destParent;
         String destName;
-        DirectoryNode existingDir = resolvePath(dest);
+        DirectoryNode existingDir = resolvePath(dest, workingDir);
         if(existingDir != null){
-            //dest is existing directory → move inside it
             destParent = existingDir;
             destName = sourceName;
         } else {
-            // dest doesn't exist → rename/move to dest's parent
-            destParent = resolveParent(dest);  // throws if parent missing
+            destParent = resolveParent(dest, workingDir);
             destName = extractLastName(dest);
         }
 
-        //Cycle detection (directory into itself)
-        if(sourceNode.getNodeType() == NodeType.DIRECTORY && isAncestor(sourceNode, destParent)) {
-            throw  new IllegalArgumentException("Source is Ancestor of Destination");
+        if(sourceNode.getNodeType() == NodeType.DIRECTORY && isAncestor(sourceNode, destParent)){
+            throw new IllegalArgumentException("Source is ancestor of destination");
         }
 
-        //Duplicate check
-        if(destParent.getChild(destName) != null) throw new IllegalArgumentException("Source File or Directory Already exist in destination");
-
-
+        if(destParent.getChild(destName) != null){
+            throw new IllegalArgumentException("Already exists at destination: " + destName);
+        }
 
         sourceParent.removeChild(sourceName);
         sourceNode.setName(destName);
@@ -196,8 +175,9 @@ public class FileManagementService {
         destParent.addChild(sourceNode);
     }
 
-    private void findByDFS(Node node, String currentPath, String name, List<String> nodeList){
+    // --- Internal helpers ---
 
+    private void findByDFS(Node node, String currentPath, String name, List<String> nodeList){
         if(node.getName().equals(name)){
             nodeList.add(currentPath);
         }
@@ -219,7 +199,6 @@ public class FileManagementService {
         }
     }
 
-    // Return true if Node a is ancestor of Node b
     private boolean isAncestor(Node a, Node b){
         while(b != null){
             if(b.equals(a)) return true;
@@ -228,7 +207,7 @@ public class FileManagementService {
         return false;
     }
 
-    private String getAbsolutePath(Node node){
+    String getAbsolutePath(Node node){
         if(node == rootNode) return "/";
         StringBuilder absolutePath = new StringBuilder();
         while(node != null && node != rootNode){
@@ -238,13 +217,13 @@ public class FileManagementService {
         return absolutePath.toString();
     }
 
-    private DirectoryNode resolveParent(String filePath){
+    private DirectoryNode resolveParent(String filePath, DirectoryNode workingDir){
         String parentPath = extractParentPath(filePath);
-        DirectoryNode parent = resolvePath(parentPath);
+        DirectoryNode parent = resolvePath(parentPath, workingDir);
         if(parent == null) throw new IllegalArgumentException("Directory does not exist: " + parentPath);
         return parent;
     }
-    
+
     private String extractLastName(String filePath){
         int lastSlash = filePath.lastIndexOf("/");
         return lastSlash == -1 ? filePath : filePath.substring(lastSlash + 1);
@@ -255,12 +234,11 @@ public class FileManagementService {
         return (lastSlash == -1) ? "." : (lastSlash == 0 ? "/" : path.substring(0, lastSlash));
     }
 
-    private DirectoryNode startingNode(String path){
-        return path.startsWith("/") ? rootNode : currentNode;
+    private DirectoryNode startingNode(String path, DirectoryNode workingDir){
+        return path.startsWith("/") ? rootNode : workingDir;
     }
 
     private String[] splitPath(String path, DirectoryNode startNode){
         return startNode == rootNode ? path.substring(1).split("/") : path.split("/");
     }
 }
-
