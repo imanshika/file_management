@@ -111,7 +111,11 @@ public class FileManagementService {
         return ((FileNode) fileNode).getContent();
     }
 
-    public Node rm(String path){
+    public void rm(String path){
+        rm(path, false);
+    }
+
+    public void rm(String path, boolean recursive){
 
         if(path.equals("/")) throw new IllegalArgumentException("Cannot delete Root Directory");
 
@@ -120,19 +124,31 @@ public class FileManagementService {
         Node child = parentNode.getChild(nodeName);
 
         if(child == null){
-            throw  new IllegalArgumentException("File/Directory does not exists");
+            throw new IllegalArgumentException("File/Directory does not exist: " + path);
         }
 
         if(isAncestor(child, currentNode)){
-            throw  new IllegalArgumentException("Cannot delete : " + path + ". Sub File/Directory is in Use");
+            throw new IllegalArgumentException("Cannot delete: " + path + ". Currently in use");
         }
 
-        if(child.getNodeType().equals(NodeType.DIRECTORY)){
-            if(((DirectoryNode) child).hasChildren())
-                throw  new IllegalArgumentException("Cannot delete : " + path + ". Sub File/Directory Exists");
+        if(!recursive && child.getNodeType() == NodeType.DIRECTORY && ((DirectoryNode) child).hasChildren()){
+            throw new IllegalArgumentException("Cannot delete: " + path + ". Directory is not empty");
         }
 
-        return parentNode.removeChild(nodeName);
+        if(recursive && child.getNodeType() == NodeType.DIRECTORY){
+            removeRecursive((DirectoryNode) child);
+        }
+
+        parentNode.removeChild(nodeName);
+    }
+
+    private void removeRecursive(DirectoryNode dir){
+        for(Node child : new ArrayList<>(dir.getChildren().values())){
+            if(child.getNodeType() == NodeType.DIRECTORY){
+                removeRecursive((DirectoryNode) child);
+            }
+            dir.removeChild(child.getName());
+        }
     }
 
     // Return true if Node a is ancestor of Node b

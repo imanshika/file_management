@@ -29,7 +29,10 @@ public class Main {
         System.out.println("readFile(\"/a/b/file.txt\") : " + service.readFile("/a/b/file.txt"));
 
         //rm file or directory
-        Node node = service.rm("/");
-        System.out.println("Removed File or Directory : " + node);
+        service.rm("/a/b", false);
+        System.out.println("Removed File or Directory non recursive");
+
+        service.rm("/a/b", true);
+        System.out.println("Removed File or Directory recursive");
     }
 }
