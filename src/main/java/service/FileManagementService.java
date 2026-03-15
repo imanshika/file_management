@@ -78,7 +78,7 @@ public class FileManagementService {
 
     public FileNode addFile(String filePath, String content){
         DirectoryNode directoryNode = resolveParent(filePath);
-        String fileName = extractFileName(filePath);
+        String fileName = extractLastName(filePath);
 
         Node existing = directoryNode.getChild(fileName);
         if(existing != null) throw new IllegalArgumentException("File already exists: " + filePath);
@@ -102,13 +102,46 @@ public class FileManagementService {
 
     public String readFile(String filePath){
         DirectoryNode directoryNode = resolveParent(filePath);
-        String fileName = extractFileName(filePath);
+        String fileName = extractLastName(filePath);
 
         Node fileNode = directoryNode.getChild(fileName);
         if(fileNode == null || fileNode.getNodeType() != NodeType.FILE){
             throw new IllegalArgumentException("File does not exist: " + filePath);
         }
         return ((FileNode) fileNode).getContent();
+    }
+
+    public Node rm(String path){
+
+        if(path.equals("/")) throw new IllegalArgumentException("Cannot delete Root Directory");
+
+        DirectoryNode parentNode = resolveParent(path);
+        String nodeName = extractLastName(path);
+        Node child = parentNode.getChild(nodeName);
+
+        if(child == null){
+            throw  new IllegalArgumentException("File/Directory does not exists");
+        }
+
+        if(isAncestor(child, currentNode)){
+            throw  new IllegalArgumentException("Cannot delete : " + path + ". Sub File/Directory is in Use");
+        }
+
+        if(child.getNodeType().equals(NodeType.DIRECTORY)){
+            if(((DirectoryNode) child).hasChildren())
+                throw  new IllegalArgumentException("Cannot delete : " + path + ". Sub File/Directory Exists");
+        }
+
+        return parentNode.removeChild(nodeName);
+    }
+
+    // Return true if Node a is ancestor of Node b
+    private boolean isAncestor(Node a, Node b){
+        while(b != null){
+            if(b.equals(a)) return true;
+            b = b.getParent();
+        }
+        return false;
     }
 
     private DirectoryNode resolveParent(String filePath){
@@ -118,8 +151,8 @@ public class FileManagementService {
         if(parent == null) throw new IllegalArgumentException("Directory does not exist: " + parentPath);
         return parent;
     }
-
-    private String extractFileName(String filePath){
+    
+    private String extractLastName(String filePath){
         int lastSlash = filePath.lastIndexOf("/");
         return lastSlash == -1 ? filePath : filePath.substring(lastSlash + 1);
     }

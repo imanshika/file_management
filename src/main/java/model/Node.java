@@ -27,5 +27,9 @@ public abstract class Node {
 
     protected abstract void validateName(String name);
 
+    @Override
+    public String toString() {
+        return "Name:"+getName()+",Type:"+getNodeType();
+    }
 }
 

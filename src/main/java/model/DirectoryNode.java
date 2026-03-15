@@ -23,6 +23,10 @@ public class DirectoryNode  extends Node {
         }
     }
 
+    public boolean hasChildren(){
+        return !children.isEmpty();
+    }
+
     public Map<String, Node> getChildren() {
         return Collections.unmodifiableMap(children);
     }
@@ -41,7 +45,7 @@ public class DirectoryNode  extends Node {
         children.put(child.getName(), child);
     }
 
-    public void removeChild(String childName) {
-        children.remove(childName);
+    public Node removeChild(String childName) {
+        return children.remove(childName);
     }
 }

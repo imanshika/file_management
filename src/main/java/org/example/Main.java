@@ -2,6 +2,7 @@ package org.example;
 
 import model.DirectoryNode;
 import model.FileNode;
+import model.Node;
 import service.FileManagementService;
 
 public class Main {
@@ -22,9 +23,13 @@ public class Main {
         System.out.println("Added file: " + file.getName());
 
         //ls("/a/b")           -> ["file.txt"]
-        System.out.println("ls(\"/a/b\"): " + service.ls("/a/b/file.txt"));
+        System.out.println("ls(\"/a/b\"): " + service.ls("/a/b/"));
 
         //readFile("/a/b/file.txt") -> "hello"
         System.out.println("readFile(\"/a/b/file.txt\") : " + service.readFile("/a/b/file.txt"));
+
+        //rm file or directory
+        Node node = service.rm("/");
+        System.out.println("Removed File or Directory : " + node);
     }
 }
