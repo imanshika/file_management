@@ -5,7 +5,7 @@ public class FileNode extends Node {
     private StringBuilder content;
 
     public FileNode(String name, Node parent) {
-        super(name, parent);
+        super(name, parent, NodeType.FILE);
         this.content = new StringBuilder();
     }
 
@@ -26,8 +26,8 @@ public class FileNode extends Node {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("File name cannot be null or empty");
         }
-        if (name.contains("/")) {
-            throw new IllegalArgumentException("File name cannot contain '/'");
+        if (name.contains("/") || name.contains("*") || name.contains("?")) {
+            throw new IllegalArgumentException("File name contains invalid characters");
         }
     }
 }

@@ -9,7 +9,7 @@ public class DirectoryNode  extends Node {
     private final Map<String, Node> children = new HashMap<>();
 
     public DirectoryNode(String name, Node parent) {
-        super(name, parent);
+        super(name, parent, NodeType.DIRECTORY);
     }
 
     @Override
@@ -17,8 +17,9 @@ public class DirectoryNode  extends Node {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("Directory name cannot be null or empty");
         }
-        if (name.contains("/")) {
-            throw new IllegalArgumentException("Directory name cannot contain '/'");
+        if (name.equals("/")) return;
+        if (name.contains("/") || name.contains("*") || name.contains("?")) {
+            throw new IllegalArgumentException("Directory name contains invalid characters");
         }
     }
 
@@ -31,6 +32,12 @@ public class DirectoryNode  extends Node {
     }
 
     public void addChild(Node child) {
+        Node existing = children.get(child.getName());
+        if (existing != null && existing.getNodeType() != child.getNodeType()) {
+            throw new IllegalArgumentException(
+                "Cannot create " + child.getNodeType() + " '" + child.getName()
+                + "': a " + existing.getNodeType() + " with that name already exists");
+        }
         children.put(child.getName(), child);
     }
 
