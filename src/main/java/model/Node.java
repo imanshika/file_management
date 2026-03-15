@@ -21,6 +21,15 @@ public abstract class Node {
         return name;
     }
 
+    public void setParent(Node parent) {
+        this.parent = parent;
+    }
+
+    public void setName(String name) {
+        validateName(name);
+        this.name = name;
+    }
+
     public Node getParent() {
         return parent;
     }

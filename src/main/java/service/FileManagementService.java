@@ -151,6 +151,51 @@ public class FileManagementService {
         return nodeList;
     }
 
+    public void mv(String source, String dest){
+
+        if(source.equals("/")) throw new IllegalArgumentException("Cannot move root node");
+
+        DirectoryNode sourceParent = resolveParent(source);
+        String sourceName = extractLastName(source);
+        Node sourceNode = sourceParent.getChild(sourceName);
+
+        if(sourceNode == null){
+            throw new IllegalArgumentException("Source does not exists: " + source);
+        }
+
+        if(isAncestor(sourceNode, currentNode)){
+            throw new IllegalArgumentException("Cannot move Source is currently in use");
+        }
+
+        DirectoryNode destParent;
+        String destName;
+        DirectoryNode existingDir = resolvePath(dest);
+        if(existingDir != null){
+            //dest is existing directory → move inside it
+            destParent = existingDir;
+            destName = sourceName;
+        } else {
+            // dest doesn't exist → rename/move to dest's parent
+            destParent = resolveParent(dest);  // throws if parent missing
+            destName = extractLastName(dest);
+        }
+
+        //Cycle detection (directory into itself)
+        if(sourceNode.getNodeType() == NodeType.DIRECTORY && isAncestor(sourceNode, destParent)) {
+            throw  new IllegalArgumentException("Source is Ancestor of Destination");
+        }
+
+        //Duplicate check
+        if(destParent.getChild(destName) != null) throw new IllegalArgumentException("Source File or Directory Already exist in destination");
+
+
+
+        sourceParent.removeChild(sourceName);
+        sourceNode.setName(destName);
+        sourceNode.setParent(destParent);
+        destParent.addChild(sourceNode);
+    }
+
     private void findByDFS(Node node, String currentPath, String name, List<String> nodeList){
 
         if(node.getName().equals(name)){
@@ -194,8 +239,7 @@ public class FileManagementService {
     }
 
     private DirectoryNode resolveParent(String filePath){
-        int lastSlash = filePath.lastIndexOf("/");
-        String parentPath = (lastSlash == -1) ? "." : (lastSlash == 0 ? "/" : filePath.substring(0, lastSlash));
+        String parentPath = extractParentPath(filePath);
         DirectoryNode parent = resolvePath(parentPath);
         if(parent == null) throw new IllegalArgumentException("Directory does not exist: " + parentPath);
         return parent;
@@ -204,6 +248,11 @@ public class FileManagementService {
     private String extractLastName(String filePath){
         int lastSlash = filePath.lastIndexOf("/");
         return lastSlash == -1 ? filePath : filePath.substring(lastSlash + 1);
+    }
+
+    private String extractParentPath(String path){
+        int lastSlash = path.lastIndexOf("/");
+        return (lastSlash == -1) ? "." : (lastSlash == 0 ? "/" : path.substring(0, lastSlash));
     }
 
     private DirectoryNode startingNode(String path){

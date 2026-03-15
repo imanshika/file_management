@@ -45,7 +45,7 @@ public class DirectoryNode  extends Node {
         children.put(child.getName(), child);
     }
 
-    public Node removeChild(String childName) {
-        return children.remove(childName);
+    public void removeChild(String childName) {
+        children.remove(childName);
     }
 }
