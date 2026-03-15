@@ -2,7 +2,6 @@ package org.example;
 
 import model.DirectoryNode;
 import model.FileNode;
-import model.Node;
 import service.FileManagementService;
 
 public class Main {
@@ -28,11 +27,18 @@ public class Main {
         //readFile("/a/b/file.txt") -> "hello"
         System.out.println("readFile(\"/a/b/file.txt\") : " + service.readFile("/a/b/file.txt"));
 
+        //find file or directory
+        System.out.println("Found File or Directory: " + service.find("/a/b", "file.txt"));
+        System.out.println("Found File or Directory: " + service.find("/a/b", "c"));
+
         //rm file or directory
         service.rm("/a/b", false);
         System.out.println("Removed File or Directory non recursive");
 
+        // rm recursively
         service.rm("/a/b", true);
         System.out.println("Removed File or Directory recursive");
+
+
     }
 }

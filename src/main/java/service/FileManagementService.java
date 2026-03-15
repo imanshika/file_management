@@ -142,6 +142,29 @@ public class FileManagementService {
         parentNode.removeChild(nodeName);
     }
 
+    public List<String> find(String basePath, String name){
+        List<String> nodeList = new ArrayList<>();
+        DirectoryNode directoryNode = resolvePath(basePath);
+        if(directoryNode == null) throw new IllegalArgumentException("Invalid basePath: " + basePath);
+        String currentPath = getAbsolutePath(directoryNode);
+        findByDFS(directoryNode, currentPath, name, nodeList);
+        return nodeList;
+    }
+
+    private void findByDFS(Node node, String currentPath, String name, List<String> nodeList){
+
+        if(node.getName().equals(name)){
+            nodeList.add(currentPath);
+        }
+
+        if(node.getNodeType() == NodeType.DIRECTORY){
+            for(Node child : ((DirectoryNode) node).getChildren().values()){
+                String childPath = currentPath.equals("/") ? "/" + child.getName() : currentPath + "/" + child.getName();
+                findByDFS(child, childPath, name, nodeList);
+            }
+        }
+    }
+
     private void removeRecursive(DirectoryNode dir){
         for(Node child : new ArrayList<>(dir.getChildren().values())){
             if(child.getNodeType() == NodeType.DIRECTORY){
@@ -158,6 +181,16 @@ public class FileManagementService {
             b = b.getParent();
         }
         return false;
+    }
+
+    private String getAbsolutePath(Node node){
+        if(node == rootNode) return "/";
+        StringBuilder absolutePath = new StringBuilder();
+        while(node != null && node != rootNode){
+            absolutePath.insert(0, "/" + node.getName());
+            node = node.getParent();
+        }
+        return absolutePath.toString();
     }
 
     private DirectoryNode resolveParent(String filePath){
