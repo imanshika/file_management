@@ -1,12 +1,18 @@
 package model;
 
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class DirectoryNode  extends Node {
 
-    private final Map<String, Node> children = new HashMap<>();
+    private final Map<String, Node> children = new ConcurrentHashMap<>();
+    private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+
+    public Lock readLock()  { return rwLock.readLock(); }
+    public Lock writeLock() { return rwLock.writeLock(); }
 
     public DirectoryNode(String name, Node parent) {
         super(name, parent, NodeType.DIRECTORY);

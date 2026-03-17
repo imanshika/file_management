@@ -15,6 +15,7 @@ public class UserSession {
         this.userId = userId;
         this.fileSystem = fileSystem;
         this.currentNode = fileSystem.getRoot();
+        currentNode.readLock().lock();
     }
 
     public String getUserId() {
@@ -24,6 +25,8 @@ public class UserSession {
     public DirectoryNode cd(String directoryPath){
         DirectoryNode node = fileSystem.resolvePath(directoryPath, currentNode);
         if(node == null) throw new IllegalArgumentException("Path does not exist: " + directoryPath);
+        node.readLock().lock();
+        currentNode.readLock().unlock();
         currentNode = node;
         return node;
     }
@@ -62,5 +65,9 @@ public class UserSession {
 
     public void mv(String source, String dest){
         fileSystem.mv(source, dest, currentNode);
+    }
+
+    public void logout(){
+        currentNode.readLock().unlock();
     }
 }

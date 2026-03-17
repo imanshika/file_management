@@ -29,14 +29,19 @@ public class FileSystem {
                 if(node.getParent() != null) node = (DirectoryNode) node.getParent();
                 continue;
             }
-            Node existing = node.getChild(segment);
-            if(existing != null && existing.getNodeType() != NodeType.DIRECTORY){
-                throw new IllegalArgumentException("Path conflict: '" + segment + "' exists as a file");
+            node.writeLock().lock();
+            try {
+                Node existing = node.getChild(segment);
+                if(existing != null && existing.getNodeType() != NodeType.DIRECTORY){
+                    throw new IllegalArgumentException("Path conflict: '" + segment + "' exists as a file");
+                }
+                DirectoryNode child = (DirectoryNode) existing;
+                if(child == null) child = new DirectoryNode(segment, node);
+                node.addChild(child);
+                node = child;
+            } finally {
+                node.writeLock().unlock();
             }
-            DirectoryNode child = (DirectoryNode) existing;
-            if(child == null) child = new DirectoryNode(segment, node);
-            node.addChild(child);
-            node = child;
         }
 
         return node;
@@ -51,9 +56,14 @@ public class FileSystem {
                 if(node.getParent() != null) node = (DirectoryNode) node.getParent();
                 continue;
             }
-            Node child = node.getChild(segment);
-            if(child == null || child.getNodeType() != NodeType.DIRECTORY) return null;
-            node = (DirectoryNode) child;
+            node.readLock().lock();
+            try {
+                Node child = node.getChild(segment);
+                if(child == null || child.getNodeType() != NodeType.DIRECTORY) return null;
+                node = (DirectoryNode) child;
+            } finally {
+                node.readLock().unlock();
+            }
         }
 
         return node;
@@ -63,35 +73,50 @@ public class FileSystem {
         DirectoryNode directoryNode = resolveParent(filePath, workingDir);
         String fileName = extractLastName(filePath);
 
-        Node existing = directoryNode.getChild(fileName);
-        if(existing != null) throw new IllegalArgumentException("File already exists: " + filePath);
+        directoryNode.writeLock().lock();
+        try {
+            Node existing = directoryNode.getChild(fileName);
+            if(existing != null) throw new IllegalArgumentException("File already exists: " + filePath);
 
-        FileNode fileNode = new FileNode(fileName, directoryNode);
-        fileNode.setContent(content);
-        directoryNode.addChild(fileNode);
-        return fileNode;
+            FileNode fileNode = new FileNode(fileName, directoryNode);
+            fileNode.setContent(content);
+            directoryNode.addChild(fileNode);
+            return fileNode;
+        } finally {
+            directoryNode.writeLock().unlock();
+        }
     }
 
     public List<String> ls(String path, DirectoryNode workingDir){
         DirectoryNode node = resolvePath(path, workingDir);
         if(node == null) throw new IllegalArgumentException("Directory does not exist: " + path);
 
-        List<String> entries = new ArrayList<>();
-        for(Node child : node.getChildren().values()){
-            entries.add(child.getName());
+        node.readLock().lock();
+        try {
+            List<String> entries = new ArrayList<>();
+            for(Node child : node.getChildren().values()){
+                entries.add(child.getName());
+            }
+            return entries;
+        } finally {
+            node.readLock().unlock();
         }
-        return entries;
     }
 
     public String readFile(String filePath, DirectoryNode workingDir){
         DirectoryNode directoryNode = resolveParent(filePath, workingDir);
         String fileName = extractLastName(filePath);
 
-        Node fileNode = directoryNode.getChild(fileName);
-        if(fileNode == null || fileNode.getNodeType() != NodeType.FILE){
-            throw new IllegalArgumentException("File does not exist: " + filePath);
+        directoryNode.readLock().lock();
+        try {
+            Node fileNode = directoryNode.getChild(fileName);
+            if(fileNode == null || fileNode.getNodeType() != NodeType.FILE){
+                throw new IllegalArgumentException("File does not exist: " + filePath);
+            }
+            return ((FileNode) fileNode).getContent();
+        } finally {
+            directoryNode.readLock().unlock();
         }
-        return ((FileNode) fileNode).getContent();
     }
 
     public void rm(String path, DirectoryNode workingDir){
@@ -103,26 +128,32 @@ public class FileSystem {
         if(path.equals("/")) throw new IllegalArgumentException("Cannot delete Root Directory");
 
         DirectoryNode parentNode = resolveParent(path, workingDir);
-        String nodeName = extractLastName(path);
-        Node child = parentNode.getChild(nodeName);
 
-        if(child == null){
-            throw new IllegalArgumentException("File/Directory does not exist: " + path);
+        parentNode.writeLock().lock();
+        try {
+            String nodeName = extractLastName(path);
+            Node child = parentNode.getChild(nodeName);
+
+            if(child == null){
+                throw new IllegalArgumentException("File/Directory does not exist: " + path);
+            }
+
+            if(isAncestor(child, workingDir)){
+                throw new IllegalArgumentException("Cannot delete: " + path + ". Currently in use");
+            }
+
+            if(!recursive && child.getNodeType() == NodeType.DIRECTORY && ((DirectoryNode) child).hasChildren()){
+                throw new IllegalArgumentException("Cannot delete: " + path + ". Directory is not empty");
+            }
+
+            if(recursive && child.getNodeType() == NodeType.DIRECTORY){
+                removeRecursive((DirectoryNode) child);
+            }
+
+            parentNode.removeChild(nodeName);
+        } finally {
+            parentNode.writeLock().unlock();
         }
-
-        if(isAncestor(child, workingDir)){
-            throw new IllegalArgumentException("Cannot delete: " + path + ". Currently in use");
-        }
-
-        if(!recursive && child.getNodeType() == NodeType.DIRECTORY && ((DirectoryNode) child).hasChildren()){
-            throw new IllegalArgumentException("Cannot delete: " + path + ". Directory is not empty");
-        }
-
-        if(recursive && child.getNodeType() == NodeType.DIRECTORY){
-            removeRecursive((DirectoryNode) child);
-        }
-
-        parentNode.removeChild(nodeName);
     }
 
     public List<String> find(String basePath, String name, DirectoryNode workingDir){
@@ -140,15 +171,6 @@ public class FileSystem {
 
         DirectoryNode sourceParent = resolveParent(source, workingDir);
         String sourceName = extractLastName(source);
-        Node sourceNode = sourceParent.getChild(sourceName);
-
-        if(sourceNode == null){
-            throw new IllegalArgumentException("Source does not exist: " + source);
-        }
-
-        if(isAncestor(sourceNode, workingDir)){
-            throw new IllegalArgumentException("Cannot move: source is currently in use");
-        }
 
         DirectoryNode destParent;
         String destName;
@@ -161,18 +183,47 @@ public class FileSystem {
             destName = extractLastName(dest);
         }
 
-        if(sourceNode.getNodeType() == NodeType.DIRECTORY && isAncestor(sourceNode, destParent)){
-            throw new IllegalArgumentException("Source is ancestor of destination");
+        DirectoryNode first, second;
+        if(sourceParent == destParent){
+            first = sourceParent;
+            second = null;
+        } else if(getAbsolutePath(sourceParent).compareTo(getAbsolutePath(destParent)) < 0){
+            first = sourceParent;
+            second = destParent;
+        } else {
+            first = destParent;
+            second = sourceParent;
         }
 
-        if(destParent.getChild(destName) != null){
-            throw new IllegalArgumentException("Already exists at destination: " + destName);
-        }
+        first.writeLock().lock();
+        if(second != null) second.writeLock().lock();
+        try {
+            Node sourceNode = sourceParent.getChild(sourceName);
 
-        sourceParent.removeChild(sourceName);
-        sourceNode.setName(destName);
-        sourceNode.setParent(destParent);
-        destParent.addChild(sourceNode);
+            if(sourceNode == null){
+                throw new IllegalArgumentException("Source does not exist: " + source);
+            }
+
+            if(isAncestor(sourceNode, workingDir)){
+                throw new IllegalArgumentException("Cannot move: source is currently in use");
+            }
+
+            if(sourceNode.getNodeType() == NodeType.DIRECTORY && isAncestor(sourceNode, destParent)){
+                throw new IllegalArgumentException("Source is ancestor of destination");
+            }
+
+            if(destParent.getChild(destName) != null){
+                throw new IllegalArgumentException("Already exists at destination: " + destName);
+            }
+
+            sourceParent.removeChild(sourceName);
+            sourceNode.setName(destName);
+            sourceNode.setParent(destParent);
+            destParent.addChild(sourceNode);
+        } finally {
+            if(second != null) second.writeLock().unlock();
+            first.writeLock().unlock();
+        }
     }
 
     // --- Internal helpers ---
@@ -183,19 +234,30 @@ public class FileSystem {
         }
 
         if(node.getNodeType() == NodeType.DIRECTORY){
-            for(Node child : ((DirectoryNode) node).getChildren().values()){
-                String childPath = currentPath.equals("/") ? "/" + child.getName() : currentPath + "/" + child.getName();
-                findByDFS(child, childPath, name, nodeList);
+            DirectoryNode dir = (DirectoryNode) node;
+            dir.readLock().lock();
+            try {
+                for(Node child : dir.getChildren().values()){
+                    String childPath = currentPath.equals("/") ? "/" + child.getName() : currentPath + "/" + child.getName();
+                    findByDFS(child, childPath, name, nodeList);
+                }
+            } finally {
+                dir.readLock().unlock();
             }
         }
     }
 
     private void removeRecursive(DirectoryNode dir){
-        for(Node child : new ArrayList<>(dir.getChildren().values())){
-            if(child.getNodeType() == NodeType.DIRECTORY){
-                removeRecursive((DirectoryNode) child);
+        dir.writeLock().lock();
+        try {
+            for(Node child : new ArrayList<>(dir.getChildren().values())){
+                if(child.getNodeType() == NodeType.DIRECTORY){
+                    removeRecursive((DirectoryNode) child);
+                }
+                dir.removeChild(child.getName());
             }
-            dir.removeChild(child.getName());
+        } finally {
+            dir.writeLock().unlock();
         }
     }
 
